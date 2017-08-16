@@ -1,0 +1,483 @@
+---
+title: "Anna, was ist eigentlich dieses DTW?"
+author: "Anna Voegele"
+date: "31. Juli 2017"
+output: ioslides_presentation
+incremental: true
+widescreen: true
+---
+
+
+```{r setup, include=FALSE}
+library('knitr')
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+## 'Recap' Zeitreihen
+
+```{r,include=FALSE}
+library('dtw')
+library('jpeg')
+```
+
+- Zeitreihen sind Diskrete Samplings von diskreten oder kontinuierlichen Funktionen, z. B.
+
+      * Bewegungsdaten (Mocap)
+      * Video Aufnahmen
+      * EKG, EMG etc.
+      * Audio: Musik, Sprache, Geräusche
+      * Aktienkurse
+
+## Beispiel EKG
+
+```{r}
+data(aami3a);
+data(aami3b);
+## Plot both as a multivariate TS object
+## only extract the first 10 seconds
+plot( main="EKG (mV)",
+window(
+cbind(aami3a,aami3b) ,end=10)
+)
+```
+
+## Darstellung von Zeitreihen
+
+- Zeitlich geordnete Abfolgen von Zuständen (Posen/Frames)
+
+$$x = \left(x_1,\ldots,x_n\right) \space n\in \mathbb{Z}_+$$
+
+- Zu einer Zeitreihen gehören 
+
+    - ihre Frame Rate und ihre Sampling Rate
+    - (meistens) ihre Einheit, z. B. Zentimeter, Millivolt 
+
+##Zeitreihen vergleichen
+
+- Vergleiche zwischen Zeitreihen werden zu vielerlei Zwecken angestellt. Dazu gehören unter anderem
+
+    - Spracherkennung
+    - Bewegungserkennung
+    - Clustering/Gruppierung von ähnlichen Signalen
+    - Klassifizierung von Verhalten
+
+    
+- Dabei ergeben sich typischwerweise Fragen wie:
+
+    - Welche Distanz- bzw. Ähnlichkeitsbegriffe kann man überhaupt verwenden?
+    - Was ist wenn die Zeitreihen verschieden lang sind?
+    - Was ist mit phasenverschobenen Signalen?
+
+##Dynamic Time Warping zum Vergleich von Zeitreihen
+
+- Der DTW Algorithmus berechnet die Veränderung der Zeitachse der Query, die nötig wäre, um optimal auf die Referenz abzubilden
+- Das Ergebnis ist die kumulative Distanz nach der Optimierung sowie die 'warping function', die die genaue Korrespondenz zwischen Query und Referenz angibt
+
+
+```{r,out.width = "400px",include=FALSE}
+knitr::include_graphics("C:/AusDemVollen/talks/dtw1.jpg")
+#Ersetze durch Bild  von zuhause...
+```
+
+
+
+# [So geht's im Schnelldurchlauf:](https://www.youtube.com/watch?v=tqL8Zjz7oJo)
+
+
+## Lokale Distanzmaße
+
+- Beispiel: MoCap Daten: Posen in 3-D werden durch Quaternionen dargestellt. Optimierungsproblem: Rotation* von einer Pose auf die andere
+- Müssen nicht Euklidisch sein
+- Müssen nicht mal eine Metrik sein
+
+*Für ein gegebenes Quaternion $q = [s,(x,y,z)]\in\mathbb{H}$ laßt sich folgende Rotationsmatrix herleiten:
+
+
+$$ \left(\begin{matrix}1−2(y^2 +z^2), 2(xy−sz),  2(xz+sy)\\
+2(xy+sz),  1−2(x^2 +z^2),  2(yz−sx)\\
+2(xz−sy), 2(yz+sx), 1−2(x^2 +y^2
+)\end{matrix}\right)$$
+]
+
+
+## Vergleich von Signalen Durch DTW
+
+- Sinuskurve mit Rauschen (gesamplete Punkte)
+- Kosinus als Referenz
+- Lokales Distanzmaß: Euklidisch
+
+
+
+```{r}
+#idx<-seq(0,10,len=100)
+idx<-seq(0,6.28,len=100)
+query<-sin(idx)+runif(100)/10
+
+
+cosinus<-cos(idx)
+plot(cosinus,ann=FALSE); 
+par(new=TRUE)
+lines(query,col="blue")
+
+alignment<-dtw(query,cosinus)
+
+```
+
+
+## Alignment durch einen sogenannten Warping Pfad
+
+- Phasenverschiebung im 'flachen' Start der Kurve sichtbar
+- Das Rauschen in der Query ist auch im Alignment zu sehen
+```{r,echo=FALSE}
+## Geht auch: plot(alignment,type="alignment")
+plot(alignment$index1,alignment$index2,main="Warping function",ann=FALSE)
+lines(1:100-25,col="red")
+
+```
+
+
+
+## Wie ging das jetzt?
+
+$$
+Q = \left(1,3,1,2,1,1,1\right)
+$$
+$$
+R = \left(1,1,3,1,2,1,1\right)
+$$
+```{r,echo=FALSE}
+Query<-c(1,3,1,2,1,1,1)
+Reference<-c(1,1,3,1,2,1,1)
+plot(Query,ann= FALSE)
+lines(Query,col='blue')
+par(new=TRUE)
+plot(Reference,xaxt='n',yaxt ='n',ann=FALSE)
+lines(Reference)
+```
+
+
+## Lasst uns das eben gemeinsam machen! {.build}
+
+ >- Als lokales Distanzmaß nehmen wir die Euklidische Distanz zwischen zwei Punkten
+
+```{r,echo=FALSE}
+costs<-matrix(c(c(0, 8, 0, 3, 0, 0,0),
+      c(0, 8, 0, 3, 0, 0,0),
+      c(3,5,3,0,3,3,3),
+      c(0, 8, 0, 3, 0, 0,0),
+      c(8,0,8,5,8,8,8),
+      c(0, 8, 0, 3, 0, 0,0),
+      c(0, 8, 0, 3, 0, 0,0)),
+      nrow=7,
+      ncol=7,              # number of columns 
+      byrow = TRUE) 
+
+print(costs)
+```
+
+##Kostenmatrix als Terrain
+
+Rot: Warping Pfad
+```{r}
+
+ds<-dtw(Query,Reference,keep = TRUE); # DTW with user-supplied local
+# cost matrix
+da<-dtw(Query,Reference,step=asymmetric) # Also compute the asymmetric
+contour(ds$costMatrix,col=terrain.colors(100),x=1:7,y=1:7,xaxt = "n",yaxt = "n")
+par(new=TRUE)
+plot(ds$index1,ds$index2,pch=3, ann=FALSE, xaxt = "n",yaxt = "n")
+axis(1, at=1:7, labels=c('1','3','1','2','1','1','1'))
+axis(2, at=1:7, labels=c('1','1','3','1','2','1','1'))
+# the low-distance marked path
+lines(ds$index1,ds$index2,col="red");
+
+
+```
+
+## Kostenmatrix für das Kosinus-Beispiel
+
+```{r}
+alignment<-dtw(query,cosinus,keep=TRUE);
+contour(alignment$costMatrix,col=terrain.colors(100),x=1:100,y=1:100,
+xlab="Query (noisy sine)",ylab="Reference (cosine)");
+lines(alignment$index1,alignment$index2,col="red",lwd=2)
+
+```
+
+
+
+##Partielles Alignment
+
+```{r,echo=FALSE}
+alignmentOBE <-
+dtw(query[44:88],cosinus,keep=TRUE,step=asymmetric,open.end=TRUE,
+    open.begin=TRUE);
+plot(alignmentOBE,type="two",off=1,ann = FALSE)
+```
+
+
+## Zwei Arten der Darstellung: Gewarpte Query...
+
+- Blau: gewarpte Query
+
+```{r}
+plot(cosinus,ann=FALSE)
+lines(query[alignment$index1]~alignment$index2,col="blue")
+```
+
+
+## ... Oder invers gewarpte Referenz
+
+-Schwarz: invers gewarpte Referenz
+```{r}
+## Plot the (unwarped) query and the inverse-warped reference
+plot(query,type="l",col="blue",ann=FALSE)
+points(cosinus[alignment$index2]~alignment$index1)
+
+```
+
+
+
+##Weiteres Beispiel
+
+- 2 x Kosinus vs Kosinus
+
+```{r}
+query2<-2*cos(idx)+runif(100)/10
+
+plot(cosinus,ann=FALSE); 
+par(new=TRUE)
+lines(query2,col="blue")
+xlab="Query (noisy cosine x 2 )"
+ylab="Reference (cosine)"
+
+```
+
+## Alignment dazu
+
+```{r}
+alignment<-dtw(query2,cosinus,keep = TRUE)
+contour(alignment$costMatrix,col=terrain.colors(100),x=1:100,y=1:100,
+xlab="Query (noisy cosine x 2 )",ylab="Reference (cosine)");
+lines(alignment$index1,alignment$index2,col="red",lwd=2)
+
+```
+
+## Zusammenfassung und Fragen
+
+- DTW nimmt sich zwei Zeitreihen und vergleicht sie 'Punkt für Punkt', obtimiert sie dann aber global bzw. abschnittsweise (partielles Alignment)
+- DTW muss ein lokales Distanzmaß berücksichtigen, welches wir in der Praxis geeignet wählen dürfen
+- Wie sieht also z. B. ein User Flow als Zeitreihe aus?
+- Wie kann man Distanzen auf User Flows definieren?
+
+## Ideenskizze
+
+```{r echo=FALSE,out.width = "550px"}
+knitr::include_graphics("C:/AusDemVollen/talks/skizze.jpg")
+```
+
+## Frequentistischer Ansatz
+
+- Beispieldaten:
+
+    SELECT count(*)															as count, 
+    first_content,
+    second_content
+    FROM(
+    SELECT
+    lead(content_id,1) OVER (PARTITION BY session_id ORDER BY date_time) 	as second_content,
+    content_id 																as first_content
+    FROM webtrekk.request
+    WHERE split(content_id,'[\.]')[1] in ('web','mew','amp','mweb')
+    	and dt LIKE '2017-06-%%') as x
+    GROUP BY first_content, second_content ORDER BY count desc
+  
+
+
+## Übergangswahrscheinlichkeiten
+
+(Auszug)
+
+```{r,include = FALSE}
+library('data.table')
+library(dplyr)
+library(GGally)
+library(network)
+library(sna)
+library(ggplot2)
+library(igraph)
+
+```
+
+
+```{r,include=FALSE,message=FALSE}
+myfile ='ausstiege_juni_2017_mit_abs_count.csv'
+ausstiege <- fread(myfile,header=TRUE)
+
+```
+
+
+```{r,include=FALSE}
+ausstiege_clean<-ausstiege[,count:=as.numeric(gsub("\\.","",count))]
+
+ausstiege_clean[,second_content:=ifelse(second_content=='','Ausstieg',second_content)]
+
+ausstiege_clean[,first_content_total:= sum(count),by=first_content]
+ausstiege_clean[,percentage:=as.double(format(count/first_content_total,scientific = F))]
+```
+
+```{r,message=FALSE,warning=FALSE}
+#v_daten<-ausstiege_clean[like(first_content,"mew")]
+v_daten<-ausstiege_clean[like(first_content,"mew")]
+v_daten<-v_daten[like(first_content,"rezept")]#& like(second_content,'Ausstieg')]
+alldata<-v_daten[percentage>0& count>10000]
+net<-network(alldata[,2:3],directed=TRUE)
+
+all_nodes <- sort(alldata$first_content)
+# Adjust the 'to' and 'from' factor levels so they are equal
+# to this complete list of node names
+plot_data <- v_daten %>% mutate(
+        to = factor(second_content, levels = all_nodes),
+        from = factor(first_content, levels = all_nodes))
+
+
+reddata<-v_daten[percentage>0.3& count>10000]
+reddata<-reddata[1:10,]
+ggplot(reddata, aes(x = first_content, y = second_content, fill = percentage)) +
+      geom_raster() +
+      theme_bw() +
+      # Because we need the x and y axis to display every node,
+      # not just the nodes that have connections to each other,
+      # make sure that ggplot does not drop unused factor levels
+      scale_x_discrete(drop = FALSE) +
+      scale_y_discrete(drop = FALSE) +
+      coord_flip()+ # scale_fill_brewer() +
+      theme(
+        # Rotate the x-axis lables so they are legible
+        axis.text.x = element_text(angle = 270, hjust = 0),
+        # Force the plot into a square aspect ratio
+        aspect.ratio = 1
+        # Hide the legend (optional)
+      )  #+ theme(legend.position="none")
+
+```
+```{r,include=FALSE}
+ggnet2(net,
+       label = TRUE,
+       label.size = 5,
+       node.size = 3,
+       arrow.size = 5,
+       arrow.gap = 0.025,
+       #node.alpha = 0.5,
+       size = "degree",
+       #edge.size = "weights",
+       legend.position = "")
+```
+
+## Darstellung as Graph
+
+```{r,include=FALSE}
+colnames(alldata)<-c('count','from','to','total','weight')
+
+reddata<-alldata[1:10,c('from','to','weight')]
+g<-graph_from_data_frame(reddata, directed = TRUE)%>%
+set_edge_attr("weight", value = reddata$weight*10)
+
+#E(g)[[]]
+
+```
+
+```{r,warning=FALSE}
+#plot(g)
+#interaktives verschieben gewünscht?
+#tkplot(g)
+plot.igraph(g,layout=layout.fruchterman.reingold,edge.width = E(g)$weight,edge.arrow.size=E(g)$weight*0.05,
+            rescale=TRUE,ylim=c(-1,1),xlim=c(-1,1),
+            vertex.label.dist=0.1,vertex.label.degree=pi/2,
+            edge.curved=seq(-0.5,0.5,length=ecount(g)),
+            vertex.color='white',
+            vertex.label.color='black',
+            vertex.label.family=2)
+```
+```{r,include=FALSE}
+g <- make_ring(10) %>%
+set_edge_attr("weight", value = 1:10) %>%
+set_edge_attr("color", value = "red")
+
+g
+plot(g, edge.width = E(g)$weight)
+
+```
+
+
+## Praktisches Beispiel
+
+$$Q=\left(I, S, S.R, S.R, R, S.R, R, S.R, R\right)$$
+$$R=\left(I, S.R, R, S.R, R, S.R, S.R, R, R\right)$$
+I = mew.index  
+S.R = mew.search.rezepte  
+R = mew.rezept.show  
+
+  - Lokale Distanzen $d(I,R) = ?$
+  
+    - Probabilistischer Ansatz:    
+    $d(I,R)=$ Häufigkeit dieser Paarung/Häufigkeit aller Paarungen
+    -Achtung: hier suchen wir zunächst den Pfad mit den höchsten Kosten
+
+
+##
+```{r,echo=FALSE}
+costs<-matrix(c(c('','I','S.R', 'S.R', 'R', 'S.R', 'R','S.R','R'),
+      c('R',0.004,0.32,0.32,0.19, 0.32,0.19 ,0.32 ,0.19),
+      c('R',0.004,0.32,0.32,0.19, 0.32,0.19 ,0.32 ,0.19),
+      c('S.R',0.005,0.22 ,0.22,0.58, 0.22,0.58 ,0.22 ,0.58),
+      c('S.R',0.005,0.22 ,0.22,0.58, 0.22,0.58 ,0.22 ,0.58),
+      c('R',0.004,0.32,0.32,0.19, 0.32,0.19 ,0.32 ,0.19),
+      c('S.R',0.005,0.22 ,0.22,0.58, 0.22,0.58 ,0.22 ,0.58),
+      c('R',0.004,0.32,0.32,0.19, 0.32,0.19 ,0.32 ,0.19),
+      c('S.R',0.005,0.22 ,0.22,0.58, 0.22,0.58 ,0.22 ,0.58),
+      c('I',0.003,0.6,0.6,0.06,0.6,0.06 ,0.6 ,0.06)),
+      nrow=10,
+      ncol=9,              # number of columns 
+      byrow = TRUE) 
+
+costsB<-matrix(c(c('','I','S.R', 'S.R', 'R', 'S.R', 'R','S.R','R'),
+      c('R',1-0.004,1-0.32,1-0.32,1-0.19, 1-0.32,1-0.19 ,1-0.32 ,1-0.19),
+      c('R',1-0.004,1-0.32,1-0.32,1-0.19, 1-0.32,1-0.19 ,1-0.32 ,1-0.19),
+      c('S.R',1-0.005,1-0.22 ,1-0.22,1-0.58, 1-0.22,1-0.58 ,1-0.22 ,1-0.58),
+      c('S.R',1-0.005,1-0.22 ,1-0.22,1-0.58, 1-0.22,1-0.58 ,1-0.22 ,1-0.58),
+      c('R',1-0.004,1-0.32,1-0.32,1-0.19, 1-0.32,1-0.19 ,1-0.32 ,1-0.19),
+      c('S.R',1-0.005,1-0.22 ,1-0.22,1-0.58, 1-0.22,1-0.58 ,1-0.22 ,1-0.58),
+      c('R',1-0.004,1-0.32,1-0.32,1-0.19, 1-0.32,1-0.19 ,1-0.32 ,1-0.19),
+      c('S.R',1-0.005,1-0.22 ,1-0.22,1-0.58, 1-0.22,1-0.58 ,1-0.22 ,1-0.58),
+      c('I',1-0.003,1-0.6,1-0.6,1-0.06,1-0.6,1-0.06 ,1-0.6 ,1-0.06)),
+      nrow=10,
+      ncol=9,              # number of columns 
+      byrow = TRUE) 
+
+
+df<-data.frame(costs)
+df<-df[2:nrow(df),2:ncol(df)]
+#colnames(df) <- x
+#rownames(df)<- y
+print(df)
+
+```
+
+##Kostenmatrix hierfür
+
+mit geschätztem Warping Pfad (rot)  
+
+```{r}
+contour(costsB[2:nrow(costsB),2:ncol(costsB)],col=terrain.colors(100),x=1:9,y=1:8, xaxt = "n",yaxt = "n")
+lines(c(1:8),c(c(2),c(2.5,4,4.5),c(5,6,6.8,8)),col="red",lwd=2)
+axis(1, at=1:9, labels=c('','I','S.R','S.R','R','S.R','R','S.R','R'))
+axis(2, at=1:8, labels=c('I','S.R','R','S.R','R','S.R','S.R','R'))
+```
+
+
+# Habt Ihr noch Fragen...?
+
+
+
